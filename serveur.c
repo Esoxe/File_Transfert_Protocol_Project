@@ -22,7 +22,7 @@ void traitement_serveur(int connfd){
         snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req->nom_ficher);
         fd=open(nom_fichier,O_RDONLY,0);
         if(fd==-1){
-            printf("Le fichier n'est pas sur le serveur");
+            printf("Le fichier n'est pas sur le serveur\n");
             rep->code_retour=404;
             rio_writen(connfd,rep,sizeof(*rep));
         }

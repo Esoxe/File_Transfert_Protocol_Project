@@ -3,6 +3,8 @@
  */
 #include "csapp.h"
 #include "requete.h"
+#include "sys/time.h" //Utilise pour la stat de temps
+
 #define CLIENT_DIR "./FichierClient"
 
 
@@ -19,6 +21,9 @@ typereq_t traduction_type_requete(char *demande){
 
 int main(int argc, char **argv)
 {
+    struct timeval debut; //Gestion du temps prit par la requete
+    struct timeval fin;
+    double temp_ecouler;
     int clientfd, port = 2121;
     char *host;
     request_t *req = malloc(sizeof(*req));
@@ -50,7 +55,7 @@ int main(int argc, char **argv)
     scanf("%s %s",demande,nom_fichier);
     type=traduction_type_requete(demande);
     if(type==-1){
-        printf("Type de requete non definie");
+        printf("Type de requete non definie\n");
         free(rep);
         free(req);
         close(clientfd);
@@ -67,8 +72,11 @@ int main(int argc, char **argv)
         break;
     case 0 :
         fichier=malloc(rep->taille_fichier);
+        gettimeofday(&debut,NULL);//Lance le chrono
         rio_readn(clientfd,fichier,rep->taille_fichier);
-        printf("Fichier %s bien reçu,(%d octets)\n",req->nom_ficher,rep->taille_fichier);
+        gettimeofday(&fin,NULL);//Fin chrono
+        temp_ecouler=(fin.tv_sec-debut.tv_sec)+(fin.tv_usec-debut.tv_usec)/1000000.0;
+        printf("Fichier %s bien reçu, %d octets en %f secondes (%f Kbytes/s)\n",req->nom_ficher,rep->taille_fichier,temp_ecouler,(rep->taille_fichier/1024)/temp_ecouler);
         //Marge de sécurité de 256 pour le nom de dossier
         snprintf(nom_fichier,MAXLINE+256,"%s/%s",CLIENT_DIR,req->nom_ficher);
         fd_res=open(nom_fichier,O_CREAT | O_WRONLY | O_TRUNC,0644);
@@ -77,7 +85,7 @@ int main(int argc, char **argv)
         free(fichier);
         break;
     default:
-        printf("Erreur coté serveur");
+        printf("Erreur coté serveur\n");
         break;
     }
     free(rep);
