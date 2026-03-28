@@ -14,10 +14,9 @@ typereq_t traduction_type_requete(char *demande){
     }
 }
 
-
-
 int main(int argc, char **argv)
 {
+    int totale_recuperer=0;
     struct timeval debut; //Gestion du temps prit par la requete
     struct timeval fin;
     double temp_ecouler;
@@ -25,12 +24,16 @@ int main(int argc, char **argv)
     char *host;
     request_t *req = malloc(sizeof(*req));
     response_t *rep = malloc(sizeof(*rep));
-    char buf[TAILLE_BLOC];
+    char *buf;
     int nb_recu;
-    int restant;
+    int restant=0;
+    int taille_bloc;
     char demande[MAXLINE];
-    char nom_fichier[MAXLINE+256];//Espace en plus poour le nom de dossier
+    char nom_fichier[MAXLINE];
+    char chemin_local[MAXLINE+256];//Espace en plus poour le nom de dossier
+
     typereq_t type;
+    struct stat st;
     int fd_res;
     if (argc != 2) {
         fprintf(stderr, "usage: %s <host>", argv[0]);
@@ -61,34 +64,66 @@ int main(int argc, char **argv)
         exit(0);
     }
     req->type=type;
+    //On verifie si le fichier n'est pas déja sur le pc et si il est on verifie qu'il n'a pas etait modifie par le serveur depuis
+    snprintf(chemin_local,MAXLINE+256,"%s/%s",CLIENT_DIR,nom_fichier);
+    if(stat(chemin_local,&st)==-1){
+        req->octets_deja_recu=0;
+        req->date_fichier=0;
+    }
+    else{
+        req->octets_deja_recu=st.st_size;
+        restant=-st.st_size;
+        char chemin_info[MAXLINE];//Envoie la derniere date de modif de ce fichier par le serveur
+        snprintf(chemin_info,MAXLINE+256,"%s/.%s.info",CLIENT_DIR,nom_fichier);
+        int fd_info=open(chemin_info,O_RDONLY);
+        if(fd_info!=-1){rio_readn(fd_info,&req->date_fichier,sizeof(time_t));}
+        else {req->date_fichier=0;}
+        close(fd_info);
+    }
     strcpy(req->nom_ficher,nom_fichier);
     rio_writen(clientfd,req,sizeof(*req));
     rio_readn(clientfd,rep,sizeof(*rep));
     switch (rep->code_retour)
     {
-    case 404:
+    case FICHIER_NON_TROUVE:
         printf("Le fichier n'est pas dans le serveur\n");
         break;
-    case 0 :
-        //Marge de sécurité de 256 pour le nom de dossier
-        snprintf(nom_fichier,MAXLINE+256,"%s/%s",CLIENT_DIR,req->nom_ficher);
-        fd_res=open(nom_fichier,O_CREAT | O_WRONLY | O_TRUNC,0644);
+    case ENVOIE_COMPLET :
+    case ENVOIE_PARTIEL :
+        //Garde en mémoire la date du fichier du serveur permet en cas de crash de verifier si le fichier source n'a pas changé
+        char chemin_info[MAXLINE];
+        snprintf(chemin_info,MAXLINE+256,"%s/.%s.info",CLIENT_DIR,nom_fichier);
+        int fd_info=open(chemin_info,O_CREAT | O_WRONLY | O_TRUNC,0644);
+        rio_writen(fd_info,&rep->date_modif,sizeof(time_t));
+        close(fd_info);
+
+        //Cas une partie du fichier est déja téléchargé
+        if(rep->code_retour==ENVOIE_PARTIEL){
+            fd_res=open(chemin_local,O_WRONLY | O_APPEND,0644);
+        }
+        else{//Cas fichier n'existe pas
+            fd_res=open(chemin_local,O_CREAT | O_WRONLY | O_TRUNC,0644);
+        }
         restant=rep->taille_fichier;
+        taille_bloc=rep->taille_bloc;
+        buf=malloc(taille_bloc);
         gettimeofday(&debut,NULL);//Lance le chrono
         while((restant>0))
         {   
-            if(restant>TAILLE_BLOC)
-                nb_recu = rio_readn(clientfd,buf,TAILLE_BLOC);
+            if(restant>taille_bloc)
+                nb_recu = rio_readn(clientfd,buf,taille_bloc);
             else{
                 nb_recu = rio_readn(clientfd,buf,restant);
             }
             //printf("Le client  a reçu %d bits\n",nb_recu);
             rio_writen(fd_res,buf,nb_recu);
+            totale_recuperer+=nb_recu;
             restant-=nb_recu;
         }
         gettimeofday(&fin,NULL);//Fin chrono
         temp_ecouler=(fin.tv_sec-debut.tv_sec)+(fin.tv_usec-debut.tv_usec)/1000000.0;
-        printf("Fichier %s bien reçu, %d octets en %f secondes (%f Kbytes/s)\n",req->nom_ficher,rep->taille_fichier,temp_ecouler,(rep->taille_fichier/1024.0)/temp_ecouler);
+        printf("Fichier %s bien reçu, %d octets en %f secondes (%f Kbytes/s)\n",req->nom_ficher,totale_recuperer,temp_ecouler,(totale_recuperer/1024.0)/temp_ecouler);
+        free(buf);
         close(fd_res);
         break;
     default:
