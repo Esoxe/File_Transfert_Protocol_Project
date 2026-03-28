@@ -12,8 +12,9 @@ void traitement_serveur(int connfd){
     request_t *req = malloc(sizeof(*req));
     response_t *rep = malloc(sizeof(*rep));
     char nom_fichier[MAXLINE+256]; //Marge de sécurité avec l'ajout du dossier
-    char * fichier;
+    char * buf[TAILLE_BLOC];
     int fd;
+    int nb_lue;
     rio_readn(connfd, req, sizeof(*req));
     switch (req->type)
     {
@@ -31,13 +32,13 @@ void traitement_serveur(int connfd){
             struct stat st;
             stat(nom_fichier,&st);
             rep->taille_fichier=st.st_size;
-            fichier=malloc(st.st_size);
-            rio_readn(fd,fichier,st.st_size);
             rio_writen(connfd,rep,sizeof(*rep));
-            rio_writen(connfd,fichier,st.st_size);
+            while((nb_lue=rio_readn(fd,buf,TAILLE_BLOC))>0)
+            {
+                rio_writen(connfd,buf,nb_lue);
+            }
             close(fd);
-            free(fichier);
-        }
+        }           
         free(req);
         free(rep);
         break;

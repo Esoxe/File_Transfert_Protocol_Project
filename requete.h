@@ -1,4 +1,6 @@
 #include "csapp.h"
+#define TAILLE_BLOC 8192
+
 typedef enum typereq_t {GET,PUT,LS} typereq_t;
 
 typedef struct request_t

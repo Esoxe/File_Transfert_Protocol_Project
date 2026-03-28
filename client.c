@@ -1,6 +1,3 @@
-/*
- * echoclient.c - An echo client
- */
 #include "csapp.h"
 #include "requete.h"
 #include "sys/time.h" //Utilise pour la stat de temps
@@ -28,9 +25,11 @@ int main(int argc, char **argv)
     char *host;
     request_t *req = malloc(sizeof(*req));
     response_t *rep = malloc(sizeof(*rep));
-    char * fichier ;
+    char buf[TAILLE_BLOC];
+    int nb_recu;
+    int restant;
     char demande[MAXLINE];
-    char nom_fichier[MAXLINE];
+    char nom_fichier[MAXLINE+256];//Espace en plus poour le nom de dossier
     typereq_t type;
     int fd_res;
     if (argc != 2) {
@@ -71,18 +70,26 @@ int main(int argc, char **argv)
         printf("Le fichier n'est pas dans le serveur\n");
         break;
     case 0 :
-        fichier=malloc(rep->taille_fichier);
-        gettimeofday(&debut,NULL);//Lance le chrono
-        rio_readn(clientfd,fichier,rep->taille_fichier);
-        gettimeofday(&fin,NULL);//Fin chrono
-        temp_ecouler=(fin.tv_sec-debut.tv_sec)+(fin.tv_usec-debut.tv_usec)/1000000.0;
-        printf("Fichier %s bien reçu, %d octets en %f secondes (%f Kbytes/s)\n",req->nom_ficher,rep->taille_fichier,temp_ecouler,(rep->taille_fichier/1024)/temp_ecouler);
         //Marge de sécurité de 256 pour le nom de dossier
         snprintf(nom_fichier,MAXLINE+256,"%s/%s",CLIENT_DIR,req->nom_ficher);
         fd_res=open(nom_fichier,O_CREAT | O_WRONLY | O_TRUNC,0644);
-        rio_writen(fd_res,fichier,rep->taille_fichier);
+        restant=rep->taille_fichier;
+        gettimeofday(&debut,NULL);//Lance le chrono
+        while((restant>0))
+        {   
+            if(restant>TAILLE_BLOC)
+                nb_recu = rio_readn(clientfd,buf,TAILLE_BLOC);
+            else{
+                nb_recu = rio_readn(clientfd,buf,restant);
+            }
+            //printf("Le client  a reçu %d bits\n",nb_recu);
+            rio_writen(fd_res,buf,nb_recu);
+            restant-=nb_recu;
+        }
+        gettimeofday(&fin,NULL);//Fin chrono
+        temp_ecouler=(fin.tv_sec-debut.tv_sec)+(fin.tv_usec-debut.tv_usec)/1000000.0;
+        printf("Fichier %s bien reçu, %d octets en %f secondes (%f Kbytes/s)\n",req->nom_ficher,rep->taille_fichier,temp_ecouler,(rep->taille_fichier/1024.0)/temp_ecouler);
         close(fd_res);
-        free(fichier);
         break;
     default:
         printf("Erreur coté serveur\n");
