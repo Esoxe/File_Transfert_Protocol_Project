@@ -12,41 +12,48 @@ void traitement_serveur(int connfd){
     request_t *req = malloc(sizeof(*req));
     response_t *rep = malloc(sizeof(*rep));
     char nom_fichier[MAXLINE+256]; //Marge de sécurité avec l'ajout du dossier
-    char * buf[TAILLE_BLOC];
+    char buf[TAILLE_BLOC];
     int fd;
     int nb_lue;
-    rio_readn(connfd, req, sizeof(*req));
-    switch (req->type)
+    while (rio_readn(connfd, req, sizeof(*req))>0)
     {
-    case GET:
-    
-        snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req->nom_ficher);
-        fd=open(nom_fichier,O_RDONLY,0);
-        if(fd==-1){
-            printf("Le fichier n'est pas sur le serveur\n");
-            rep->code_retour=404;
-            rio_writen(connfd,rep,sizeof(*rep));
-        }
-        else{
-            rep->code_retour = 0;
-            struct stat st;
-            stat(nom_fichier,&st);
-            rep->taille_fichier=st.st_size;
-            rio_writen(connfd,rep,sizeof(*rep));
-            while((nb_lue=rio_readn(fd,buf,TAILLE_BLOC))>0)
-            {
-                rio_writen(connfd,buf,nb_lue);
+        switch (req->type)
+        {
+        case GET:
+        
+            snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req->nom_ficher);
+            fd=open(nom_fichier,O_RDONLY,0);
+            if(fd==-1){
+                printf("Le fichier n'est pas sur le serveur\n");
+                rep->code_retour=404;
+                rio_writen(connfd,rep,sizeof(*rep));
             }
-            close(fd);
-        }           
-        free(req);
-        free(rep);
-        break;
-    default:        
-        free(req);
-        free(rep);
-        break;
+            else{
+                rep->code_retour = 0;
+                struct stat st;
+                stat(nom_fichier,&st);
+                rep->taille_fichier=st.st_size;
+                rio_writen(connfd,rep,sizeof(*rep));
+                while((nb_lue=rio_readn(fd,buf,TAILLE_BLOC))>0)
+                {
+                    rio_writen(connfd,buf,nb_lue);
+                }
+                close(fd);
+            }           
+            break;
+        case BYE:
+            rep->code_retour=67;
+            rio_writen(connfd,rep,sizeof(*rep));
+            free(req);
+            free(rep);
+            return;
+            
+        default:        
+            break;
+        }
+    
     }
+    
 }
 
 
