@@ -1,5 +1,4 @@
-#include "csapp.h"
-#include "requete.h"
+#include "serveurmaitre.h"
 #define NB_PROCS 10 
 #define MAX_NAME_LEN 256
 #define SERVER_DIR "./FichierServeur"
@@ -11,63 +10,64 @@ void handler(int sig) {
     exit(0);
 }
 void traitement_serveur(int connfd){
-    request_t *req = malloc(sizeof(*req));
-    response_t *rep = malloc(sizeof(*rep));
+    request_t req;
+    response_t rep;
     char nom_fichier[MAXLINE+256]; //Marge de sécurité avec l'ajout du dossier
     char buf[TAILLE_BLOC];
     int fd;
     int nb_lue;
-    while (rio_readn(connfd, req, sizeof(*req))>0)
+    while (rio_readn(connfd, &req, sizeof(req))>0)
     {
-        switch (req->type)
+        switch (req.type)
         {
         case GET:
-            snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req->nom_ficher);
+            snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req.nom_ficher);
             fd=open(nom_fichier,O_RDONLY,0);
             if(fd==-1){
-                rep->code_retour=404;
-                rio_writen(connfd,rep,sizeof(*rep));
+                rep.code_retour=404;
+                rio_writen(connfd,&rep,sizeof(rep));
             }
             else{            
                 struct stat st;
                 stat(nom_fichier,&st);
-                if(req->octets_deja_recu!=0 && req->date_fichier==st.st_mtime){
+                if(req.octets_deja_recu!=0 && req.date_fichier==st.st_mtime){
                     //Si le fichier du serveur n'a pas était modifié depuis le derniere telechargment on ne commence pas du début
-                    lseek(fd,req->octets_deja_recu,SEEK_SET);
-                    rep->taille_fichier=st.st_size-req->octets_deja_recu;
-                    rep->code_retour=ENVOIE_PARTIEL;        
+                    if(req.octets_deja_recu==st.st_size){//Cas ou le fichier est complet
+                        rep.code_retour=DEJA_COMPLET;
+                        rep.taille_fichier=0;
+                    }
+                    else{
+                        lseek(fd,req.octets_deja_recu,SEEK_SET);
+                        rep.taille_fichier=st.st_size-req.octets_deja_recu;
+                        rep.code_retour=ENVOIE_PARTIEL;        
+                    }
                 }
                 else{
-                    rep->taille_fichier=st.st_size;
-                    rep->code_retour=ENVOIE_COMPLET;
+                    rep.taille_fichier=st.st_size;
+                    rep.code_retour=ENVOIE_COMPLET;
                 }
-                rep->date_modif=st.st_mtime; //Recupere la date de derniere modification du fichier
-                rep->taille_bloc=TAILLE_BLOC;
-                rio_writen(connfd,rep,sizeof(*rep));
-                while((nb_lue=rio_readn(fd,buf,TAILLE_BLOC))>0)
-                {
-                    int statut_client=rio_writen(connfd,buf,nb_lue);
-                    if(statut_client==-1){break;}
-                    // usleep(50000); //Pour débugage commenter si pas fait
+                rep.date_modif=st.st_mtime; //Recupere la date de derniere modification du fichier
+                rep.taille_bloc=TAILLE_BLOC;
+                rio_writen(connfd,&rep,sizeof(rep));
+                if(rep.taille_fichier >0){
+                    while((nb_lue=rio_readn(fd,buf,TAILLE_BLOC))>0)
+                    {
+                        int statut_client=rio_writen(connfd,buf,nb_lue);
+                        if(statut_client==-1){break;}
+                        // usleep(50000); //Pour débugage commenter si pas fait
+                    }
                 }
                 close(fd);
             }           
-            free(req);
-            free(rep);
             break;
         case BYE:
-            rep->code_retour=67;
-            rio_writen(connfd,rep,sizeof(*rep));
-            free(req);
-            free(rep);
-            return;
-            
+            rep.code_retour=67;
+            rio_writen(connfd,&rep,sizeof(rep));
+            break;
         default:        
             break;
         }
-    
     }
-    
 }
 
 
@@ -75,7 +75,11 @@ void traitement_serveur(int connfd){
 
 int main(int argc, char **argv)
 {
-    int listenfd, connfd, port=2121;
+    if (argc != 2) {
+        fprintf(stderr, "usage: %s <port>(entre %d et %d)\n", argv[0],PORT_DEBUT_ESCLAVE,PORT_DEBUT_ESCLAVE+NB_SLAVES);
+        exit(0);
+    }
+    int listenfd, connfd, port=atoi(argv[1]);
     socklen_t clientlen;
     struct sockaddr_in clientaddr;
     char client_ip_string[INET_ADDRSTRLEN];

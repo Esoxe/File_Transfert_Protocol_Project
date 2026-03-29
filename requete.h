@@ -1,6 +1,8 @@
 #include "csapp.h"
 
 typedef enum typereq_t {GET,PUT,LS,BYE} typereq_t;
+//Indique au maitre si il etais deja connecter a un autre serveur et le serveur a crash ou si nouvelle connexion
+typedef enum typereq_maitre_t {NOUVELLE,PANNE} typereq_maitre_t;
 
 
 typedef struct request_t
@@ -12,6 +14,21 @@ typedef struct request_t
 
 } request_t;
 
+typedef struct 
+{
+    typereq_maitre_t type;
+    int port;
+}requete_maitre_t;
+
+
+//Structure donnant le serveur ou doit se connecter le client
+typedef struct 
+{
+    char ip[INET_ADDRSTRLEN];
+    int port;
+}response_maitre_t;
+
+//Structure permettant d'initier le transfert entre le serveur et le client 
 typedef struct  response_t
 {
     int taille_bloc;
@@ -21,9 +38,10 @@ typedef struct  response_t
 
 }response_t;
 
-//Liste de codes de retour
+//Liste des codes de retour
 #define SUCCES 0
 #define FICHIER_NON_TROUVE 404
 #define FIN_CONNEXION 67
 #define ENVOIE_COMPLET 100
 #define ENVOIE_PARTIEL 104
+#define DEJA_COMPLET 300
