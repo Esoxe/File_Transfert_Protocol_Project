@@ -17,49 +17,57 @@ void traitement_serveur(int connfd){
     char buf[TAILLE_BLOC];
     int fd;
     int nb_lue;
-    rio_readn(connfd, req, sizeof(*req));
-    switch (req->type)
+    while (rio_readn(connfd, req, sizeof(*req))>0)
     {
-    case GET:
-    
-        snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req->nom_ficher);
-        fd=open(nom_fichier,O_RDONLY,0);
-        if(fd==-1){
-            rep->code_retour=404;
+        switch (req->type)
+        {
+        case GET:
+            snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req->nom_ficher);
+            fd=open(nom_fichier,O_RDONLY,0);
+            if(fd==-1){
+                rep->code_retour=404;
+                rio_writen(connfd,rep,sizeof(*rep));
+            }
+            else{            
+                struct stat st;
+                stat(nom_fichier,&st);
+                if(req->octets_deja_recu!=0 && req->date_fichier==st.st_mtime){
+                    //Si le fichier du serveur n'a pas était modifié depuis le derniere telechargment on ne commence pas du début
+                    lseek(fd,req->octets_deja_recu,SEEK_SET);
+                    rep->taille_fichier=st.st_size-req->octets_deja_recu;
+                    rep->code_retour=ENVOIE_PARTIEL;        
+                }
+                else{
+                    rep->taille_fichier=st.st_size;
+                    rep->code_retour=ENVOIE_COMPLET;
+                }
+                rep->date_modif=st.st_mtime; //Recupere la date de derniere modification du fichier
+                rep->taille_bloc=TAILLE_BLOC;
+                rio_writen(connfd,rep,sizeof(*rep));
+                while((nb_lue=rio_readn(fd,buf,TAILLE_BLOC))>0)
+                {
+                    int statut_client=rio_writen(connfd,buf,nb_lue);
+                    if(statut_client==-1){break;}
+                    // usleep(50000); //Pour débugage commenter si pas fait
+                }
+                close(fd);
+            }           
+            free(req);
+            free(rep);
+            break;
+        case BYE:
+            rep->code_retour=67;
             rio_writen(connfd,rep,sizeof(*rep));
+            free(req);
+            free(rep);
+            return;
+            
+        default:        
+            break;
         }
-        else{            
-            struct stat st;
-            stat(nom_fichier,&st);
-            if(req->octets_deja_recu!=0 && req->date_fichier==st.st_mtime){
-                //Si le fichier du serveur n'a pas était modifié depuis le derniere telechargment on ne commence pas du début
-                lseek(fd,req->octets_deja_recu,SEEK_SET);
-                rep->taille_fichier=st.st_size-req->octets_deja_recu;
-                rep->code_retour=ENVOIE_PARTIEL;        
-            }
-            else{
-                rep->taille_fichier=st.st_size;
-                rep->code_retour=ENVOIE_COMPLET;
-            }
-            rep->date_modif=st.st_mtime; //Recupere la date de derniere modification du fichier
-            rep->taille_bloc=TAILLE_BLOC;
-            rio_writen(connfd,rep,sizeof(*rep));
-            while((nb_lue=rio_readn(fd,buf,TAILLE_BLOC))>0)
-            {
-                int statut_client=rio_writen(connfd,buf,nb_lue);
-                if(statut_client==-1){break;}
-                // usleep(50000); //Pour débugage commenter si pas fait
-            }
-            close(fd);
-        }           
-        free(req);
-        free(rep);
-        break;
-    default:        
-        free(req);
-        free(rep);
-        break;
+    
     }
+    
 }
 
 

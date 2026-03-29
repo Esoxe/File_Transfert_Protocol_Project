@@ -1,6 +1,6 @@
 #include "csapp.h"
 
-typedef enum typereq_t {GET,PUT,LS} typereq_t;
+typedef enum typereq_t {GET,PUT,LS,BYE} typereq_t;
 
 
 typedef struct request_t
