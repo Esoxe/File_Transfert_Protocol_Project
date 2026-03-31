@@ -26,11 +26,13 @@ void syncronisation_serveur(int current_port,typereq_t type,char *file_name,off_
         fd=open(chemin_local,O_RDONLY,0);
         if(fd==-1) return; //SI le fichier est introuvable
     }
-    for(int i=PORT_DEBUT_ESCLAVE;i<PORT_DEBUT_ESCLAVE+NB_SLAVES;i++){
-        if(i==current_port){//On ne syncronise pas le serveur avec lui même
+    for(int i=0;i<NB_SLAVES;i++){
+        char *target_ip=CONFIG_SERVEURS[i].ip;
+        int target_port = CONFIG_SERVEURS[i].port;
+        if(target_port==current_port){//On ne syncronise pas le serveur avec lui même
             continue;
         }
-        int current_transfert=open_clientfd("127.0.0.1",i);
+        int current_transfert=open_clientfd(target_ip,target_port);
         if(current_transfert!=-1){
             rio_writen(current_transfert,&req,sizeof(req));
             rio_readn(current_transfert,&rep,sizeof(rep));
@@ -235,16 +237,30 @@ void traitement_serveur(int connfd,int port){
 int main(int argc, char **argv)
 {
     if (argc != 2) {
-        fprintf(stderr, "usage: %s <port>(entre %d et %d)\n", argv[0],PORT_DEBUT_ESCLAVE,PORT_DEBUT_ESCLAVE+NB_SLAVES);
+        fprintf(stderr, "usage: %s <port>(doit faire partie de l'annuaire)\n", argv[0]);
         exit(0);
     }
     int port=atoi(argv[1]);
-    //On verifie si le numéro de port est disponible et le numéro valide
+    //On verifie si le port appartient a l'annuaire
+    int port_valide = 0;
+    for(int i=0; i<NB_SLAVES; i++){
+        if(CONFIG_SERVEURS[i].port == port) {
+            port_valide = 1;
+            break;
+        }
+    }
     int test = -1;
-    while ((port<PORT_DEBUT_ESCLAVE || port>=PORT_DEBUT_ESCLAVE+NB_SLAVES) || ((test=open_listenfd(port))==-1))
+    while (!port_valide || ((test=open_listenfd(port))==-1))
     {
-        printf("Port non disponible ou en dehors de la plage %d-%d : ",PORT_DEBUT_ESCLAVE,PORT_DEBUT_ESCLAVE+NB_SLAVES);
+        printf("Port non valide ou indisponible. Veuillez entrer un port de l'annuaire : ");
         scanf("%d",&port);
+        port_valide = 0;
+        for(int i=0; i<NB_SLAVES; i++){//verifie si il est valide
+            if(CONFIG_SERVEURS[i].port == port) {
+                port_valide = 1;
+                break;
+            }
+        }
     }
     int listenfd, connfd;
     socklen_t clientlen;

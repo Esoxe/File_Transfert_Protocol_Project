@@ -1,6 +1,5 @@
 #include "serveurmaitre.h"
 #define MAX_NAME_LEN 256
-#define IP_SERVEUR "localhost"
 //On suppose ici que les serveur esclave son sur la même machine donc on utilise l'ip 127.0.0.1
 //Sinon on definira un tableau d'adresse IP pour chaque serveur 
 //Si les serveurs sont sur des machines differentes on pourra utiliser le même port pour toute
@@ -10,14 +9,15 @@ int main(int argc, char **argv){
     info_esclave_t tab_esclaves[NB_SLAVES];
     //On Se connecte et verifie la liste de serveur disponible
     for(int i=0;i<NB_SLAVES;i++){
-        int current_port=PORT_DEBUT_ESCLAVE+i;
-        int serveurfd = open_clientfd(IP_SERVEUR,current_port);
+        char *current_ip=CONFIG_SERVEURS[i].ip;
+        int current_port=CONFIG_SERVEURS[i].port;
+        int serveurfd = open_clientfd(current_ip,current_port);
         if(serveurfd==-1){
             printf("Serveur numero %d au port %d n'est pas disponible\n",i,current_port);
             tab_esclaves[i].port=-1; //Serveur non disponible
         }
         else{
-            strcpy(tab_esclaves[i].ip,IP_SERVEUR);
+            strcpy(tab_esclaves[i].ip,current_ip);
             tab_esclaves[i].port=current_port;
             close(serveurfd);
         }
@@ -50,9 +50,12 @@ int main(int argc, char **argv){
             req_maitre.type=(typereq_maitre_t)ntohl((uint32_t)req_maitre.type);//Cast au cas ou le type enuméré est pas en int32
             //Detecte si c'est une nouvelle demande ou non si non elle met a jour l'état du serveur defectueux
             if(req_maitre.type==PANNE){
-                //On verifie que le numéro de port envoyer a du sens
-                if(req_maitre.port>=PORT_DEBUT_ESCLAVE && req_maitre.port<PORT_DEBUT_ESCLAVE+NB_SLAVES){
-                    tab_esclaves[req_maitre.port-PORT_DEBUT_ESCLAVE].port=-1;
+                //On cherche l'esclaves dans l'annuaire
+                for(int j=0; j<NB_SLAVES; j++){
+                    if(CONFIG_SERVEURS[j].port == req_maitre.port){
+                        tab_esclaves[j].port = -1;
+                        break;
+                    }
                 }
             }
             //Trouve le premier serveur disponible
@@ -60,7 +63,7 @@ int main(int argc, char **argv){
             for(i=0;i<NB_SLAVES;i++)
             {
                 if(tab_esclaves[tourniquet].port!=-1){
-                    int test=open_clientfd(IP_SERVEUR,tab_esclaves[tourniquet].port);
+                    int test=open_clientfd(tab_esclaves[tourniquet].ip,tab_esclaves[tourniquet].port);
                     if(test==-1){
                         tab_esclaves[tourniquet].port=-1;
                     }
