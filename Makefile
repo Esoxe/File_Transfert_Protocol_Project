@@ -19,7 +19,7 @@ INCLUDE = csapp.h requete.h
 OBJS = csapp.o
 INCLDIR = -I.
 
-PROGS = serveur client 
+PROGS = serveur client serveurmaitre
 
 
 all: $(PROGS)
