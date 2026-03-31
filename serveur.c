@@ -1,7 +1,7 @@
 #include "serveurmaitre.h"
 #define NB_PROCS 10 
 #define MAX_NAME_LEN 256
-#define SERVER_DIR "./FichierServeur"
+#define SERVER_DIR "./FichierServeur_"
 #define TAILLE_BLOC 8192
 
 
@@ -9,21 +9,92 @@ void handler(int sig) {
     Kill(-getpid(),SIGKILL);
     exit(0);
 }
-void traitement_serveur(int connfd){
+//On suppose ici que tous les serveurs sont sur le même pc on pourrait demander au maitre qui sont tous les autres serveurs
+//Pour pouvoir propager la mise a jour
+void syncronisation_serveur(int current_port,typereq_t type,char *file_name,off_t size){
+    request_t req;
+    response_t rep;
+    req.type=htonl(type);
+    strcpy(req.nom_ficher,file_name);
+    req.taille_fichier=htonl(size);
+    req.date_fichier=htonl(0);
+    char chemin_local[MAXLINE+256];
+    snprintf(chemin_local, MAXLINE + 256, "./FichierServeur_%d/%s", current_port, file_name);
+    char buf[TAILLE_BLOC];
+    int fd=open(chemin_local,O_RDONLY,0);
+    for(int i=PORT_DEBUT_ESCLAVE;i<PORT_DEBUT_ESCLAVE+NB_SLAVES;i++){
+        if(i==current_port){//On ne syncronise pas le serveur avec lui même
+            continue;
+        }
+        int current_transfert=open_clientfd("127.0.0.1",i);
+        if(current_transfert!=-1){
+            rio_writen(current_transfert,&req,sizeof(req));
+            rio_readn(current_transfert,&rep,sizeof(rep));
+            rep.code_retour=ntohl(rep.code_retour);
+            if(rep.code_retour==READY_PUT){//On envoie le fichier au serveur code similaire a put client ou get serveur
+                lseek(fd,0,SEEK_SET);//On reviens au début du fichier pour une nouvelle sauvegarde
+                int restant=size;
+                int total_envoye=0;
+                int nb_lu;
+                while (restant>0)
+                {
+                    if(restant>TAILLE_BLOC)
+                        nb_lu = rio_readn(fd,buf,TAILLE_BLOC);
+                    else{
+                        nb_lu = rio_readn(fd,buf,restant);
+                    }
+
+                    rio_writen(current_transfert,buf,nb_lu);
+                    total_envoye+=nb_lu;
+                    restant-=nb_lu;
+                }
+                printf("Fichier %s bien envoyé, (%d octets) au serveur de port %d \n",file_name,total_envoye,current_port);
+            }
+            else if(rep.code_retour==SUCCES){
+                printf("Fichier %s bien supprimé, au serveur de port %d \n",file_name,current_port);
+            }
+        }
+    }
+    close(fd);
+}
+
+void traitement_serveur(int connfd,int port){
+    char *tab_utilisateur[3]={"vania:jadoreSR","florian:perfectionniste","ange:jadoreVania"};
     request_t req;
     response_t rep;
     char nom_fichier[MAXLINE+256]; //Marge de sécurité avec l'ajout du dossier
     char buf[TAILLE_BLOC];
     int fd;
     int nb_lue;
+    int auth=0;
     while (rio_readn(connfd, &req, sizeof(req))>0)
     {
         //Adaptation a l'architecture du serveur
         req.type=ntohl(req.type);
+        //Verifie si authentifie si commande qui a besoin
+        if((req.type==RM || req.type==PUT) && auth==0){
+            rep.code_retour=htonl(NON_AUTORISE);
+            rio_writen(connfd,&rep,sizeof(rep));
+            continue;
+        }
         switch (req.type)
         {
+        case AUTH:
+            for(int i=0;i<3;i++){
+                if(strcmp(tab_utilisateur[i],req.nom_ficher)==0){
+                    auth=1;
+                }
+            }
+            if(auth==1){
+                rep.code_retour=htonl(AUTH_OK);
+            }
+            else{
+                rep.code_retour=htonl(AUTH_FAILED);
+            }
+            rio_writen(connfd,&rep,sizeof(rep));
+            break;
         case GET:
-            snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req.nom_ficher);
+            snprintf(nom_fichier,MAXLINE + 256,"./FichierServeur_%d/%s",port,req.nom_ficher);
             fd=open(nom_fichier,O_RDONLY,0);
             if(fd==-1){
                 rep.code_retour=htonl(404);
@@ -72,7 +143,9 @@ void traitement_serveur(int connfd){
             break;
         case LS:
             // le resultat de ls sera dans fpipe
-            FILE * fpipe = popen("ls -1 ./FichierServeur","r");
+            char commande_ls[MAXLINE];
+            snprintf(commande_ls,MAXLINE,"ls -1 ./FichierServeur_%d",port);
+            FILE * fpipe = popen(commande_ls,"r");
             if (fpipe==NULL)
             {
                 rep.code_retour=htonl(237);
@@ -90,19 +163,24 @@ void traitement_serveur(int connfd){
             }
             break;
         case RM:
-            snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req.nom_ficher);
+        case SYNC_RM:
+            snprintf(nom_fichier,MAXLINE + 256,"./FichierServeur_%d/%s",port,req.nom_ficher);
             int ret=remove(nom_fichier);
             if (ret==0)
             {
-                rep.code_retour=htonl(0);
+                rep.code_retour=htonl(SUCCES);
             } else {
-                rep.code_retour=htonl(404);
+                rep.code_retour=htonl(FICHIER_NON_TROUVE);
             }
             rio_writen(connfd,&rep,sizeof(rep));
+            if(req.type==RM){
+                syncronisation_serveur(port,SYNC_RM,req.nom_ficher,0);
+            }
             break;
         case PUT:
+        case SYNC_PUT:
             req.taille_fichier=ntohl(req.taille_fichier);
-            snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req.nom_ficher);
+            snprintf(nom_fichier,MAXLINE + 256,"./FichierServeur_%d/%s",port,req.nom_ficher);
             rep.taille_bloc=htonl(TAILLE_BLOC);
             rep.code_retour=htonl(READY_PUT);
             fd=open(nom_fichier, O_CREAT | O_WRONLY | O_TRUNC,0644);
@@ -129,10 +207,14 @@ void traitement_serveur(int connfd){
                 }
                 printf("Fichier %s bien recu, (%d octets) \n",req.nom_ficher,total_recu);
                 close(fd);
+                if(req.type==PUT){
+                    syncronisation_serveur(port,SYNC_PUT,req.nom_ficher,req.taille_fichier);
+                }
             break;
+
         case BYE:
             memset(&rep,0,sizeof(rep));
-            rep.code_retour=htonl(67);
+            rep.code_retour=htonl(FIN_CONNEXION);
             rio_writen(connfd,&rep,sizeof(rep));
             break;
         default:        
@@ -140,7 +222,6 @@ void traitement_serveur(int connfd){
         }
     }
 }
-
 
 
 
@@ -163,7 +244,9 @@ int main(int argc, char **argv)
     struct sockaddr_in clientaddr;
     char client_ip_string[INET_ADDRSTRLEN];
     char client_hostname[MAX_NAME_LEN];
-    
+    char chemin_local[MAXLINE+256];
+    snprintf(chemin_local,MAXLINE ,"./FichierServeur_%d",port);
+    mkdir(chemin_local,0777);//Crée le répertoire de ce serveur sur la machine permet de tester en locale notamment
     clientlen = (socklen_t)sizeof(clientaddr);
     Signal(SIGINT,handler);
     listenfd = test;
@@ -171,7 +254,7 @@ int main(int argc, char **argv)
     {
         if(Fork()==0)
         {
-            Signal(SIGPIPE,SIG_IGN);//On ignore les sigpipe possible si le client se deconnecte durant transfert on gére manuellement
+            Signal(SIGPIPE,SIG_IGN);//On ignore les sigpipe possible si le client se deconnecte durant transfert
             while (1)
             {
                 connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
@@ -187,9 +270,8 @@ int main(int argc, char **argv)
         
                     printf("server connected to %s (%s)\n", client_hostname,
                     client_ip_string); 
-                    traitement_serveur(connfd);
+                    traitement_serveur(connfd,port);
                     printf("server disconected to %s (%s)\n", client_hostname,client_ip_string); 
-
                     Close(connfd);
                 }
             }

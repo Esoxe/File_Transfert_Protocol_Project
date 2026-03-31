@@ -64,7 +64,7 @@
             struct timeval fin;
             double temp_ecouler;
             int clientfd;
-            int port_serveur;
+            int port_serveur=0;
             char *host;
             request_t req;
             response_t rep;
@@ -97,6 +97,40 @@
             * has not yet called "Accept" for this connection
             */
             printf("client connected to server OS\n"); 
+            printf("Voulez vous vous authentifier (O/N) : ");
+            char user_rep[100];
+            char id[100];
+            int j =1;
+            scanf("%s",user_rep);
+            if(strcmp(user_rep,"O")==0){
+                for(;j<4;j++){
+                    printf("Veuillez donnez votre login et votre mot de passe (login:motdepasse) essai n°%d : ",j);
+                    scanf("%s",id);
+                    strcpy(req.nom_ficher,id);
+                    req.type=htonl(AUTH);
+                    int writ_t = rio_writen(clientfd,&req,sizeof(req));
+                    int read_t=rio_readn(clientfd,&rep,sizeof(rep));
+                    //Si le serveur a crash pendant attente du client on refait une demande au maitre
+                    if(writ_t==-1 || read_t<=0){
+                        clientfd=connexion_maitre(host,PANNE,&port_serveur);
+                        rio_writen(clientfd,&req,sizeof(req));
+                        rio_readn(clientfd,&rep,sizeof(rep));
+                    }
+                    rep.code_retour=ntohl(rep.code_retour);
+                    if(rep.code_retour==AUTH_OK){
+                        printf("Vous êtes connecté en tant qu' administrateur modification des fichiers du serveur possible\n");
+                        break;
+                    }
+                    else{
+                        printf("Identifiant incorrect\n");
+                    }
+                }
+                if(j==4){
+                    printf("3 tentatives de connexion incorrectes vous serez connecté en tant que visiteur\n Veuillez relancer une session pour vous connecter en administrateur\n");
+                }
+            }
+            int c; //On nettoie le buffer pour le fgets d'aprés
+            while ((c=getchar())!='\n'&& c!=EOF){}
             
             while (!terminer)
             {
@@ -178,6 +212,9 @@
                 rep.code_retour=ntohl(rep.code_retour);
                 switch (rep.code_retour)
                 {
+                case NON_AUTORISE:
+                    printf("Accés refusé vous devez relancer une session afin de vous authentifier pour utiliser PUT et RM \n");
+                    break;
                 case SUCCES:
                     printf("Le fichier a bien été supprimé\n");
                     break;

@@ -1,6 +1,6 @@
 #include "csapp.h"
-
-typedef enum typereq_t {GET,RM,PUT,LS,BYE} typereq_t;
+//Requete possible client serveur les deux derniere étant entre serveur
+typedef enum typereq_t {GET,RM,PUT,LS,BYE,AUTH,SYNC_RM,SYNC_PUT} typereq_t;
 //Indique au maitre si il etais deja connecter a un autre serveur et le serveur a crash ou si nouvelle connexion
 typedef enum typereq_maitre_t {NOUVELLE,PANNE} typereq_maitre_t;
 
@@ -41,6 +41,9 @@ typedef struct  response_t
 
 //Liste des codes de retour
 #define SUCCES 0
+#define AUTH_OK 200
+#define AUTH_FAILED 403
+#define NON_AUTORISE 401
 #define FICHIER_NON_TROUVE 404
 #define FIN_CONNEXION 67
 #define ENVOIE_COMPLET 100

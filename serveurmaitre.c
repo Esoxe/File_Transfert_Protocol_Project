@@ -1,6 +1,6 @@
 #include "serveurmaitre.h"
 #define MAX_NAME_LEN 256
-
+#define IP_SERVEUR "localhost"
 //On suppose ici que les serveur esclave son sur la même machine donc on utilise l'ip 127.0.0.1
 //Sinon on definira un tableau d'adresse IP pour chaque serveur 
 //Si les serveurs sont sur des machines differentes on pourra utiliser le même port pour toute
@@ -11,13 +11,13 @@ int main(int argc, char **argv){
     //On Se connecte et verifie la liste de serveur disponible
     for(int i=0;i<NB_SLAVES;i++){
         int current_port=PORT_DEBUT_ESCLAVE+i;
-        int serveurfd = open_clientfd("127.0.0.1",current_port);
+        int serveurfd = open_clientfd(IP_SERVEUR,current_port);
         if(serveurfd==-1){
             printf("Serveur numero %d au port %d n'est pas disponible\n",i,current_port);
             tab_esclaves[i].port=-1; //Serveur non disponible
         }
         else{
-            strcpy(tab_esclaves[i].ip,"127.0.0.1");
+            strcpy(tab_esclaves[i].ip,IP_SERVEUR);
             tab_esclaves[i].port=current_port;
             close(serveurfd);
         }
@@ -60,7 +60,7 @@ int main(int argc, char **argv){
             for(i=0;i<NB_SLAVES;i++)
             {
                 if(tab_esclaves[tourniquet].port!=-1){
-                    int test=open_clientfd("127.0.0.1",tab_esclaves[tourniquet].port);
+                    int test=open_clientfd(IP_SERVEUR,tab_esclaves[tourniquet].port);
                     if(test==-1){
                         tab_esclaves[tourniquet].port=-1;
                     }
