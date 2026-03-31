@@ -2,7 +2,6 @@
 #define NB_PROCS 10 
 #define MAX_NAME_LEN 256
 #define SERVER_DIR "./FichierServeur"
-#define CLIENT_DIR "./FichierClient"
 #define TAILLE_BLOC 8192
 
 
@@ -76,14 +75,14 @@ void traitement_serveur(int connfd){
             FILE * fpipe = popen("ls -1 ./FichierServeur","r");
             if (fpipe==NULL)
             {
-                rep.code_retour=237;
+                rep.code_retour=htonl(237);
                 rio_writen(connfd,&rep,sizeof(rep));
 
             } else {
                 char buffer[50000];
                 int taille_ls=fread(buffer, sizeof(char), 50000, fpipe);
-                rep.taille_fichier=taille_ls;
-                rep.code_retour=236;
+                rep.taille_fichier=htonl(taille_ls);
+                rep.code_retour=htonl(236);
                 rep.taille_bloc=TAILLE_BLOC;
                 rio_writen(connfd,&rep,sizeof(rep));
                 rio_writen(connfd,buffer,taille_ls);
@@ -95,16 +94,17 @@ void traitement_serveur(int connfd){
             int ret=remove(nom_fichier);
             if (ret==0)
             {
-                rep.code_retour=0;
+                rep.code_retour=htonl(0);
             } else {
-                rep.code_retour=1;
+                rep.code_retour=htonl(404);
             }
             rio_writen(connfd,&rep,sizeof(rep));
             break;
         case PUT:
+            req.taille_fichier=ntohl(req.taille_fichier);
             snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req.nom_ficher);
-            rep.taille_bloc=TAILLE_BLOC;
-            rep.code_retour=READY_PUT;
+            rep.taille_bloc=htonl(TAILLE_BLOC);
+            rep.code_retour=htonl(READY_PUT);
             fd=open(nom_fichier, O_CREAT | O_WRONLY | O_TRUNC,0644);
             rio_writen(connfd,&rep,sizeof(rep));
             int total_recu=0;

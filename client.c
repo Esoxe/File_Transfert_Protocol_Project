@@ -163,7 +163,7 @@
                 strcpy(req.nom_ficher,nom_fichier);
                 if (type==PUT)
                 {
-                    req.taille_fichier=st.st_size;
+                    req.taille_fichier=htonl(st.st_size);
                 }
                 req.date_fichier=(htonl(req.date_fichier));
                 int writ_t = rio_writen(clientfd,&req,sizeof(req));
@@ -171,7 +171,7 @@
                 //Si le serveur a crash pendant attente du client on refait une demande au maitre
                 if(writ_t==-1 || read_t<=0){
                     clientfd=connexion_maitre(host,PANNE,&port_serveur);
-                    io_writen(clientfd,&req,sizeof(req));
+                    rio_writen(clientfd,&req,sizeof(req));
                     rio_readn(clientfd,&rep,sizeof(rep));
                 }
                 //Convertie dans l'architecture du client
@@ -254,7 +254,7 @@
                     printf("Le fichier %s est déja complet et a jour sur le disque local\n",req.nom_ficher);
                     break;
                 case ENVOIE_LS:
-                    int taille_ls=rep.taille_fichier;
+                    int taille_ls=ntohl(rep.taille_fichier);
                     buf=malloc(taille_ls);
                     rio_readn(clientfd,buf,taille_ls);
                     rio_writen(STDOUT_FILENO,buf,taille_ls);
@@ -265,8 +265,8 @@
                     break;
                 case READY_PUT:
                     int fd=open(chemin_local,O_RDONLY,0);
-                    restant=req.taille_fichier;
-                    taille_bloc=rep.taille_bloc;
+                    restant=st.st_size;
+                    taille_bloc=ntohl(rep.taille_bloc);
                     buf=malloc(taille_bloc);
                     int total_envoye=0;
 
