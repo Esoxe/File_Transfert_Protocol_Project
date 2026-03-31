@@ -19,16 +19,20 @@ void traitement_serveur(int connfd){
     int nb_lue;
     while (rio_readn(connfd, &req, sizeof(req))>0)
     {
+        //Adaptation a l'architecture du serveur
+        req.type=ntohl(req.type);
         switch (req.type)
         {
         case GET:
             snprintf(nom_fichier,MAXLINE + 256,"%s/%s",SERVER_DIR,req.nom_ficher);
             fd=open(nom_fichier,O_RDONLY,0);
             if(fd==-1){
-                rep.code_retour=404;
+                rep.code_retour=htonl(404);
                 rio_writen(connfd,&rep,sizeof(rep));
             }
-            else{            
+            else{         
+                req.date_fichier=ntohl(req.date_fichier);
+                req.octets_deja_recu=ntohl(req.octets_deja_recu);   
                 struct stat st;
                 stat(nom_fichier,&st);
                 if(req.octets_deja_recu!=0 && req.date_fichier==st.st_mtime){
@@ -49,13 +53,19 @@ void traitement_serveur(int connfd){
                 }
                 rep.date_modif=st.st_mtime; //Recupere la date de derniere modification du fichier
                 rep.taille_bloc=TAILLE_BLOC;
+                //Prepare l'envoie en adaptant l'architecture
+                rep.taille_bloc=htonl(rep.taille_bloc);
+                int taille_a_envoyer=rep.taille_fichier;
+                rep.taille_fichier=htonl(rep.taille_fichier);
+                rep.code_retour=htonl(rep.code_retour);
+                rep.date_modif=htonl(rep.date_modif);
                 rio_writen(connfd,&rep,sizeof(rep));
-                if(rep.taille_fichier >0){
+                if(taille_a_envoyer >0){
                     while((nb_lue=rio_readn(fd,buf,TAILLE_BLOC))>0)
                     {
                         int statut_client=rio_writen(connfd,buf,nb_lue);
                         if(statut_client==-1){break;}
-                        // usleep(50000); //Pour débugage commenter si pas fait
+                        // usleep(5000); //Pour débugage commenter si pas fait
                     }
                 }
                 close(fd);
@@ -121,7 +131,8 @@ void traitement_serveur(int connfd){
                 close(fd);
             break;
         case BYE:
-            rep.code_retour=67;
+            memset(&rep,0,sizeof(rep));
+            rep.code_retour=htonl(67);
             rio_writen(connfd,&rep,sizeof(rep));
             break;
         default:        
@@ -139,7 +150,15 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: %s <port>(entre %d et %d)\n", argv[0],PORT_DEBUT_ESCLAVE,PORT_DEBUT_ESCLAVE+NB_SLAVES);
         exit(0);
     }
-    int listenfd, connfd, port=atoi(argv[1]);
+    int port=atoi(argv[1]);
+    //On verifie si le numéro de port est disponible et le numéro valide
+    int test = -1;
+    while ((port<PORT_DEBUT_ESCLAVE || port>=PORT_DEBUT_ESCLAVE+NB_SLAVES) || ((test=open_listenfd(port))==-1))
+    {
+        printf("Port non disponible ou en dehors de la plage %d-%d : ",PORT_DEBUT_ESCLAVE,PORT_DEBUT_ESCLAVE+NB_SLAVES);
+        scanf("%d",&port);
+    }
+    int listenfd, connfd;
     socklen_t clientlen;
     struct sockaddr_in clientaddr;
     char client_ip_string[INET_ADDRSTRLEN];
@@ -147,7 +166,7 @@ int main(int argc, char **argv)
     
     clientlen = (socklen_t)sizeof(clientaddr);
     Signal(SIGINT,handler);
-    listenfd = Open_listenfd(port);
+    listenfd = test;
     for(int i =0;i<NB_PROCS;i++)
     {
         if(Fork()==0)
@@ -176,6 +195,8 @@ int main(int argc, char **argv)
             }
         }        
     }
-    while (1) {}
+    for(int i =0;i<NB_PROCS;i++){
+        Wait(NULL);
+    }
 }
 

@@ -13,7 +13,7 @@ int main(int argc, char **argv){
         int current_port=PORT_DEBUT_ESCLAVE+i;
         int serveurfd = open_clientfd("127.0.0.1",current_port);
         if(serveurfd==-1){
-            printf("Serveur numero %d au port %d n'est pas disponible",i,current_port);
+            printf("Serveur numero %d au port %d n'est pas disponible\n",i,current_port);
             tab_esclaves[i].port=-1; //Serveur non disponible
         }
         else{
@@ -46,6 +46,8 @@ int main(int argc, char **argv){
             printf("server Master connected to %s (%s)\n", client_hostname,
             client_ip_string); 
             rio_readn(connfd,&req_maitre,sizeof(req_maitre));
+            req_maitre.port=ntohl(req_maitre.port);//Convertion boutisme du serveur
+            req_maitre.type=(typereq_maitre_t)ntohl((uint32_t)req_maitre.type);//Cast au cas ou le type enuméré est pas en int32
             //Detecte si c'est une nouvelle demande ou non si non elle met a jour l'état du serveur defectueux
             if(req_maitre.type==PANNE){
                 //On verifie que le numéro de port envoyer a du sens
@@ -54,21 +56,38 @@ int main(int argc, char **argv){
                 }
             }
             //Trouve le premier serveur disponible
-            int i=0;
-            while (tab_esclaves[tourniquet].port==-1&& i<NB_SLAVES){
+            int i = 0;
+            for(i=0;i<NB_SLAVES;i++)
+            {
+                if(tab_esclaves[tourniquet].port!=-1){
+                    int test=open_clientfd("127.0.0.1",tab_esclaves[tourniquet].port);
+                    if(test==-1){
+                        tab_esclaves[tourniquet].port=-1;
+                    }
+                    else{
+                        close(test);
+                        break;
+                    }
+                }
                 tourniquet=(tourniquet+1)%NB_SLAVES;
-                i++;
             }
             if(i==NB_SLAVES){//Cas ou aucun serveur n'est disponible
-                rep.port=-1;
+                rep.port=htonl(-1);
             }
             else{
                 strcpy(rep.ip,tab_esclaves[tourniquet].ip);
-                rep.port=tab_esclaves[tourniquet].port;
+                rep.port=htonl(tab_esclaves[tourniquet].port);
             }
             rio_writen(connfd,&rep,sizeof(rep));
-            printf("Client (%s,ip:%s) connecter au serveur n° %d d'adresse %s et au port %d\n",client_hostname,client_ip_string,tourniquet,tab_esclaves[tourniquet].ip,tab_esclaves[tourniquet].port); 
+            if(i!=NB_SLAVES){
+                printf("Client (%s,ip:%s) connecter au serveur n° %d d'adresse %s et au port %d\n",client_hostname,client_ip_string,tourniquet,tab_esclaves[tourniquet].ip,tab_esclaves[tourniquet].port); 
+            }
+            else{
+                printf("Aucun serveur disponible relancer les serveurs et le serveur maitre\n");
+            }
             tourniquet=(tourniquet+1)%NB_SLAVES;
+            printf("server Master disconnected to %s (%s)\n", client_hostname,
+            client_ip_string); 
             Close(connfd);
         }
     }
