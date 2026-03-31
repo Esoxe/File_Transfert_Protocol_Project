@@ -12,6 +12,15 @@
         if(strcmp(demande,"BYE")==0){
             return BYE;
         }
+        if(strcmp(demande,"LS")==0){
+            return LS;
+        }
+        if(strcmp(demande,"RM")==0){
+            return RM;
+        }
+        if(strcmp(demande,"PUT")==0){
+            return PUT;
+        }
         else{
             return -1;
         }
@@ -28,6 +37,7 @@
         response_t rep;
         char *buf;
         int nb_recu;
+        int nb_lu;
         int restant=0;
         int taille_bloc;
         char recupin[MAXLINE+256];
@@ -106,6 +116,12 @@
             //On verifie si le fichier n'est pas déja sur le pc et si il est on verifie qu'il n'a pas etait modifie par le serveur depuis
             snprintf(chemin_local,MAXLINE+256,"%s/%s",CLIENT_DIR,nom_fichier);
             if(stat(chemin_local,&st)==-1){
+                if (type == PUT)
+                {
+                    printf("Erreur: le fichier n'existe pas en locale\n");
+                    continue;
+                }
+                
                 req.octets_deja_recu=0;
                 req.date_fichier=0;
             }
@@ -120,10 +136,21 @@
                 close(fd_info);
             }
             strcpy(req.nom_ficher,nom_fichier);
+            if (type==PUT)
+            {
+                req.taille_fichier=st.st_size;
+            }
+            
             rio_writen(clientfd,&req,sizeof(req));
             rio_readn(clientfd,&rep,sizeof(rep));
             switch (rep.code_retour)
             {
+            case SUCCES:
+                printf("SUCCES\n");
+                break;
+            case ECHEC:
+                printf("ECHEC\n");
+                break;
             case FICHIER_NON_TROUVE:
                 printf("Le fichier n'est pas dans le serveur\n");
                 break;
@@ -172,7 +199,6 @@
                         restant=rep.taille_fichier;
                         continue;
                     }
-                    //printf("Le client  a reçu %d bits\n",nb_recu);
                     rio_writen(fd_res,buf,nb_recu);
                     totale_recuperer+=nb_recu;
                     restant-=nb_recu;
@@ -185,6 +211,39 @@
                 break;
             case DEJA_COMPLET:
                 printf("Le fichier %s est déja complet et a jour sur le disque local\n",req.nom_ficher);
+                break;
+            case ENVOIE_LS:
+                int taille_ls=rep.taille_fichier;
+                buf=malloc(taille_ls);
+                rio_readn(clientfd,buf,taille_ls);
+                rio_writen(STDOUT_FILENO,buf,taille_ls);
+                free(buf);
+                break;
+            case ERREUR_LS:
+                printf("Erreure lors de l'éxécution de la commande LS\n");
+                break;
+            case READY_PUT:
+                int fd=open(chemin_local,O_RDONLY,0);
+                restant=req.taille_fichier;
+                taille_bloc=rep.taille_bloc;
+                buf=malloc(taille_bloc);
+                int total_envoye=0;
+
+                while (restant>0)
+                {
+                    if(restant>taille_bloc)
+                        nb_lu = rio_readn(fd,buf,taille_bloc);
+                    else{
+                        nb_lu = rio_readn(fd,buf,restant);
+                    }
+
+                    rio_writen(clientfd,buf,nb_lu);
+                    total_envoye+=nb_lu;
+                    restant-=nb_lu;
+                }
+                printf("Fichier %s bien envoyé, (%d octets) \n",req.nom_ficher,total_envoye);
+                free(buf);
+                close(fd);
                 break;
             case FIN_CONNEXION:
                 printf("Goodbye\n");
