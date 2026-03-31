@@ -15,7 +15,7 @@ LDFLAGS =
 #LIBS += -lsocket -lnsl -lrt
 LIBS += -lpthread
 
-INCLUDE = csapp.h requete.h
+INCLUDE = csapp.h requete.h serveurmaitre.h
 OBJS = csapp.o
 INCLDIR = -I.
 

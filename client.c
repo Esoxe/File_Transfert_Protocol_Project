@@ -266,7 +266,9 @@
                             int nouveau_code=ntohl(rep.code_retour);
                             if(nouveau_code==ENVOIE_COMPLET){//Si jamais le fichier est mis a jour pendant le telechargement
                                 ftruncate(fd_res,0);
+                                lseek(fd_res,0,SEEK_SET);
                                 totale_recuperer=0;
+                                memoire_octets_initiaux=0;
                             }
                             if(nouveau_code==FICHIER_NON_TROUVE){//SI le nouveau serveur n'a pas le fichier l'utilisateur doit refaire une demande
                                 printf("Erreur critique : le serveur de secours ne poosède pas le fichier.\n");

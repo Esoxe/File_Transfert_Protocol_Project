@@ -11,6 +11,7 @@ typedef struct {
 } info_esclave_t;
 
 //Annuaire des différents IP et adresses des serveurs
+//Metre local uniquement si les serveurs sont sur la meme machine que le client !
 //Les ports doivents différent pour que le code fonctionne même si théoriquement pas nécessaire si différentes machines
 //Car les ports sont utilisé comme identifiants
 static info_esclave_t CONFIG_SERVEURS[NB_SLAVES]= {
