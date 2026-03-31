@@ -21,7 +21,11 @@ void syncronisation_serveur(int current_port,typereq_t type,char *file_name,off_
     char chemin_local[MAXLINE+256];
     snprintf(chemin_local, MAXLINE + 256, "./FichierServeur_%d/%s", current_port, file_name);
     char buf[TAILLE_BLOC];
-    int fd=open(chemin_local,O_RDONLY,0);
+    int fd=-1;
+    if(type== SYNC_PUT){
+        fd=open(chemin_local,O_RDONLY,0);
+        if(fd==-1) return; //SI le fichier est introuvable
+    }
     for(int i=PORT_DEBUT_ESCLAVE;i<PORT_DEBUT_ESCLAVE+NB_SLAVES;i++){
         if(i==current_port){//On ne syncronise pas le serveur avec lui même
             continue;
@@ -53,9 +57,12 @@ void syncronisation_serveur(int current_port,typereq_t type,char *file_name,off_
             else if(rep.code_retour==SUCCES){
                 printf("Fichier %s bien supprimé, au serveur de port %d \n",file_name,current_port);
             }
+            close(current_transfert);
         }
     }
-    close(fd);
+    if(fd!=-1){
+        close(fd);
+    }
 }
 
 void traitement_serveur(int connfd,int port){
