@@ -6,7 +6,9 @@
 
 
 void handler(int sig) {
-    Kill(-getpid(),SIGKILL);
+    Signal(SIGINT,SIG_IGN);
+    Kill(-getpid(),SIGINT);
+    while (waitpid(-1,NULL,0)>0){}
     exit(0);
 }
 //On suppose ici que tous les serveurs sont sur le même pc on pourrait demander au maitre qui sont tous les autres serveurs
@@ -277,6 +279,7 @@ int main(int argc, char **argv)
     {
         if(Fork()==0)
         {
+            Signal(SIGINT,SIG_DFL);
             Signal(SIGPIPE,SIG_IGN);//On ignore les sigpipe possible si le client se deconnecte durant transfert
             while (1)
             {
